@@ -52,7 +52,7 @@
       ack.addEventListener('change', () => { enter.disabled = !ack.checked; });
       enter.addEventListener('click', () => {
         if (!ack.checked) return;
-        try { sessionStorage.setItem('tccc_safety_ack_v2_19_2', '1'); } catch (_) {}
+        try { sessionStorage.setItem('tccc_safety_ack_v2_19_3', '1'); } catch (_) {}
         setSafetyOpen(false);
       });
     }
@@ -62,7 +62,7 @@
     });
 
     let acknowledged = false;
-    try { acknowledged = sessionStorage.getItem('tccc_safety_ack_v2_19_2') === '1'; } catch (_) {}
+    try { acknowledged = sessionStorage.getItem('tccc_safety_ack_v2_19_3') === '1'; } catch (_) {}
     setSafetyOpen(!acknowledged);
   }
 

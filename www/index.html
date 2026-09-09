@@ -51,7 +51,7 @@
       <div class="eyebrow">TACTICAL COMBAT CASUALTY CARE</div>
       <h1 data-brand-product>TCCC Evaluation Suite</h1>
       <p>Class-based, offline grading for TCCC Tier 1–4 scenario evaluations. Critical tasks require explicit grading; noncritical criteria support scenario applicability and block closeout.</p>
-      <div class="versionLine">v<span id="appVersion">—</span> · Android · Performance-intelligence evaluator workflow</div>
+      <div class="versionLine">v<span id="appVersion">—</span> · Android · Field-hardened evaluator workflow</div>
     </section>
     <section class="homeActions">
       <button id="newClassBtn" class="action primary big">+ New Class</button>
@@ -94,40 +94,12 @@
       <p class="helper">Class-level NT applies only to noncritical criteria. All critical criteria remain mandatory in the evaluation and cannot be removed by the scenario profile. A critical NT or N/O remains unresolved and blocks finalization.</p>
       <div class="scenarioTools"><button id="scenarioBtn" class="action">Configure Scenario NT</button></div>
     </section>
-    <section class="card analyticsCard">
-      <div class="cardHead"><span>Class Performance Intelligence</span><span id="analyticsScope">Finalized Attempt 1</span></div>
-      <div id="classAnalyticsKpis" class="analyticsKpis"></div>
-      <details class="analyticsDetails" open>
-        <summary>Training Gaps &amp; Root Causes</summary>
-        <div class="analyticsSplit">
-          <div><h3>Highest Competency Gaps</h3><div id="classGapTable"></div></div>
-          <div><h3>Primary Root Causes</h3><div id="classRootCauses"></div></div>
-        </div>
-      </details>
-      <details class="analyticsDetails">
-        <summary>Student Comparison &amp; Competency Heat Map</summary>
-        <div id="studentComparison"></div>
-        <div id="classHeatmap" class="heatmapWrap"></div>
-        <div id="evaluatorSignals" class="evaluatorSignals"></div>
-      </details>
-    </section>
     <section class="card">
       <div class="cardHead"><span>Roster</span><span id="rosterCount"></span></div>
       <div class="rosterTools">
         <button id="addStudentBtn" class="action primary">+ Add Student</button>
         <button id="importRosterBtn" class="action">Import Roster CSV</button>
         <input id="rosterFile" type="file" accept=".csv,text/csv" hidden>
-      </div>
-      <div class="rosterFilterBar" aria-label="Roster filters">
-        <input id="rosterSearch" class="rosterSearch" type="search" placeholder="Search student, rank, or training ID">
-        <div id="rosterFilters" class="rosterFilters">
-          <button class="filterChip active" data-roster-filter="all">All</button>
-          <button class="filterChip" data-roster-filter="not-started">Not Started</button>
-          <button class="filterChip" data-roster-filter="in-progress">In Progress</button>
-          <button class="filterChip" data-roster-filter="failed">Failed</button>
-          <button class="filterChip" data-roster-filter="remediation">Remediation</button>
-          <button class="filterChip" data-roster-filter="qualified">Qualified</button>
-        </div>
       </div>
       <div id="rosterList" class="rosterList"></div>
     </section>
@@ -137,9 +109,9 @@
         <button id="classPdfBtn" class="action primary">Visual Class Summary PDF</button>
         <button id="classSummaryCsvBtn" class="action">Summary CSV</button>
         <button id="classCriteriaCsvBtn" class="action">Criteria CSV</button>
+        <button id="enterpriseAnalyticsCsvBtn" class="action primary">Enterprise Analytics CSV</button>
         <button id="classTimersCsvBtn" class="action">Timers CSV</button>
         <button id="classEventsCsvBtn" class="action">Events CSV</button>
-        <button id="classAnalyticsCsvBtn" class="action">Performance Analytics CSV</button>
         <button id="backupClassBtn" class="action">Backup Class JSON</button>
       </div>
     </section>
@@ -179,7 +151,6 @@
     <div class="phaseToolbar">
       <button id="prevPhaseBtn" class="ghost small">← Previous</button>
       <button id="nextUnresolvedBtn" class="action compact">Next Unresolved</button>
-      <button id="evalModeBtn" class="ghost small" type="button">Field Mode</button>
       <label class="toggleLabel"><input id="showNtToggle" type="checkbox"> Show NT</label>
       <button id="nextPhaseBtn" class="ghost small">Next →</button>
     </div>
@@ -187,15 +158,14 @@
     <div id="items"></div>
     <div class="blockCloseout"><button id="nextUnresolvedBottomBtn" class="action primary nextUnresolvedAction">Next Unresolved</button><div id="blockCloseoutHint" class="helper"></div></div>
   </section>
-  <section id="reviewTimelineCard" class="card">
+  <section class="card">
     <div class="cardHead"><span>Clinical / Evaluation Timeline</span><span id="eventCount"></span></div>
     <div id="timeline" class="timeline"></div>
   </section>
-  <section id="reviewSignoffCard" class="card signoff">
+  <section class="card signoff">
     <div class="cardHead"><span>Sign-Off / Notes</span><span>Typed acknowledgment</span></div>
     <div class="signGrid">
       <input id="trainerSign" placeholder="Evaluator name (stored with this attempt)">
-      <input id="attemptEvaluatorId" placeholder="Evaluator ID / cadre identifier">
       <input id="studentSign" placeholder="Student acknowledgment name">
     </div>
     <textarea id="overallNotes" placeholder="Overall evaluator comments / notes"></textarea>
@@ -220,6 +190,7 @@
 <script src="version.js"></script>
 <script src="tiers.js"></script>
 <script src="branding.js"></script>
+<script src="installations.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

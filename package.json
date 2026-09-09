@@ -1,26 +1,18 @@
 {
   "name": "tccc-evaluation-suite",
-  "version": "2.20.0",
+  "version": "2.19.3",
   "private": true,
-  "description": "Offline Android TCCC Tier 1-4 evaluation suite for class-based scenario grading.",
+  "description": "Offline-first TCCC Tier 1-4 evaluation suite for Android/Capacitor.",
   "scripts": {
-    "validate": "node scripts/validate-content.mjs && node --check www/app.js && node --check www/tiers.js",
-    "android:add": "npx cap add android",
-    "android:prepare": "node scripts/prepare-android.mjs && npx cap add android && npx cap sync android && bash scripts/apply-android-native-branding.sh && node scripts/harden-android.mjs",
-    "android:sync": "npx cap sync android && bash scripts/apply-android-native-branding.sh && node scripts/harden-android.mjs",
-    "android:debug": "npm run android:prepare && cd android && ./gradlew assembleDebug",
-    "android:release": "npm run android:prepare && cd android && ./gradlew assembleRelease"
+    "validate": "node scripts/validate-content.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^7.0.0",
     "@capacitor/app": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@capacitor/filesystem": "^7.0.0"
   },
   "devDependencies": {
-    "@capacitor/android": "^7.0.0",
     "@capacitor/cli": "^7.0.0"
-  },
-  "engines": {
-    "node": ">=20"
   }
 }

@@ -1,4 +1,4 @@
 window.TCCC_BUILD = Object.freeze({
-  versionName: '2.20.0',
-  versionCode: 22000
+  versionName: '2.19.3',
+  versionCode: 21903
 });
