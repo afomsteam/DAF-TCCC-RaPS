@@ -7,141 +7,81 @@ permissions:
   contents: read
 
 jobs:
-  build-release:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Set up Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
-      - name: Setup Java
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install dependencies
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+        run: npm install
 
-      - name: Preflight required source files
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f package.json
-          test -f capacitor.config.json
-          test -f www/version.js
-          test -f scripts/prepare-android.mjs
-          test -f scripts/harden-android.mjs
-          test -f scripts/apply-android-native-branding.sh
-          test -d native-android-res
-          test -f native-android-res/mipmap-xxxhdpi/ic_launcher.png
-          test -f native-android-res/mipmap-xxxhdpi/ic_launcher_foreground.png
-          test -f native-android-res/drawable-port-xxxhdpi/splash.png
-          echo "Preflight source tree OK"
+      - name: Validate source content
+        run: npm run validate
 
-      - name: Validate evaluator hardening
-        shell: bash
+      - name: Generate Android project
         run: |
-          node --check www/app.js
-          node --check www/tiers.js
-          node --check www/branding.js
-          node --check www/version.js
-          node --check scripts/harden-android.mjs
-          python scripts/validate_hardening.py
-
-      - name: Generate clean Capacitor Android project
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/prepare-android.mjs
+          rm -rf android
           npx cap add android
           npx cap sync android
+          python3 scripts/apply_android_version.py
+          node scripts/harden-android.mjs
 
-      - name: Apply TCCC native branding
-        shell: bash
-        run: bash scripts/apply-android-native-branding.sh
-
-      - name: Apply Android hardening and authoritative version
-        run: node scripts/harden-android.mjs
-
-      - name: Verify prepared Android project
-        shell: bash
+      - name: Build unsigned release APK
         run: |
-          set -euo pipefail
-          test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
-          test -f android/app/src/main/res/drawable-port-xxxhdpi/splash.png
-          test -f android/app/src/main/AndroidManifest.xml
-          if [ -f android/app/build.gradle ]; then
-            GRADLE=android/app/build.gradle
-          elif [ -f android/app/build.gradle.kts ]; then
-            GRADLE=android/app/build.gradle.kts
-          else
-            echo "android/app/build.gradle(.kts) missing after Capacitor generation" >&2
-            exit 1
-          fi
-          python - "$GRADLE" <<'PY'
-          import pathlib, re, sys
-          version = pathlib.Path('www/version.js').read_text(encoding='utf-8')
-          gradle = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
-          name = re.search(r"versionName:\s*['\"]([^'\"]+)['\"]", version).group(1)
-          code = re.search(r"versionCode:\s*(\d+)", version).group(1)
-          if not re.search(rf"versionName\s*(?:=\s*)?['\"]{re.escape(name)}['\"]", gradle):
-              raise SystemExit(f'Gradle versionName does not match {name}')
-          if not re.search(rf"versionCode\s*(?:=\s*)?{code}\b", gradle):
-              raise SystemExit(f'Gradle versionCode does not match {code}')
-          print(f'Verified Android version {name} ({code})')
-          PY
-          grep -q 'android:allowBackup="false"' android/app/src/main/AndroidManifest.xml
-          grep -q 'android:usesCleartextTraffic="false"' android/app/src/main/AndroidManifest.xml
-          echo "Android branding, hardening, and version verification OK"
+          chmod +x android/gradlew
+          cd android
+          ./gradlew --no-daemon assembleRelease
 
-      - name: Restore release signing key
-        shell: bash
+      - name: Decode release keystore
         env:
-          KEYSTORE_BASE64: ${{ secrets.TCCC_KEYSTORE_BASE64 }}
+          KEYSTORE_B64: ${{ secrets.TCCC_KEYSTORE_BASE64 }}
         run: |
-          test -n "$KEYSTORE_BASE64" || { echo "Missing GitHub secret TCCC_KEYSTORE_BASE64"; exit 1; }
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/tccc-release.jks"
+          test -n "$KEYSTORE_B64" || (echo "TCCC_KEYSTORE_BASE64 is required" && exit 1)
+          echo "$KEYSTORE_B64" | base64 --decode > release-keystore.jks
 
-      - name: Build signed release APK
-        working-directory: android
+      - name: Align, sign, and verify release APK
         env:
-          STORE_PASSWORD: ${{ secrets.TCCC_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.TCCC_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.TCCC_KEY_PASSWORD }}
+          STORE_PASS: ${{ secrets.TCCC_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.TCCC_KEY_PASSWORD }}
         run: |
-          test -n "$STORE_PASSWORD" || { echo "Missing TCCC_KEYSTORE_PASSWORD"; exit 1; }
-          test -n "$KEY_ALIAS" || { echo "Missing TCCC_KEY_ALIAS"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "Missing TCCC_KEY_PASSWORD"; exit 1; }
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/tccc-release.jks" \
-            -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
-
-      - name: Name artifact and create checksum
-        shell: bash
-        run: |
-          VERSION=$(python - <<'PY'
-          import re
-          t=open('www/version.js', encoding='utf-8').read()
-          print(re.search(r"versionName:\s*['\"]([^'\"]+)['\"]", t).group(1))
-          PY
-          )
-          cp android/app/build/outputs/apk/release/app-release.apk "TCCC-v${VERSION}-release.apk"
-          sha256sum "TCCC-v${VERSION}-release.apk" > "TCCC-v${VERSION}-release.sha256"
+          test -n "$KEY_ALIAS" && test -n "$STORE_PASS" && test -n "$KEY_PASS"
+          BT="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          UNSIGNED="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          ALIGNED="TCCC-v2.19.3-aligned.apk"
+          SIGNED="TCCC-v2.19.3-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/zipalign" -p -f 4 "$UNSIGNED" "$ALIGNED"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" sign \
+            --ks release-keystore.jks \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$STORE_PASS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out "$SIGNED" "$ALIGNED"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --verbose "$SIGNED"
+          sha256sum "$SIGNED" > "$SIGNED.sha256"
+          rm -f "$ALIGNED" release-keystore.jks
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: TCCC-signed-release-apk
+          name: TCCC-v2.19.3-release
           path: |
-            TCCC-v*-release.apk
-            TCCC-v*-release.sha256
+            TCCC-v2.19.3-release.apk
+            TCCC-v2.19.3-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
