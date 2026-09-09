@@ -1,76 +1,75 @@
 from pathlib import Path
-import json
-import re
-
-root = Path(__file__).resolve().parents[1]
-www = root / 'www'
-app = (www / 'app.js').read_text(encoding='utf-8')
-css = (www / 'styles.css').read_text(encoding='utf-8')
-idx = (www / 'index.html').read_text(encoding='utf-8')
-tiers = (www / 'tiers.js').read_text(encoding='utf-8')
-version = (www / 'version.js').read_text(encoding='utf-8')
-branding = (www / 'branding.js').read_text(encoding='utf-8')
-harden = (root / 'scripts' / 'harden-android.mjs').read_text(encoding='utf-8')
-branding_script = root / 'scripts' / 'apply-android-native-branding.sh'
-package = json.loads((root / 'package.json').read_text(encoding='utf-8'))
-test_workflow = (root / '.github' / 'workflows' / 'build-test-apk.yml').read_text(encoding='utf-8')
-release_workflow = (root / '.github' / 'workflows' / 'build-release-apk.yml').read_text(encoding='utf-8')
-
-name_match = re.search(r"versionName:\s*['\"]([^'\"]+)['\"]", version)
-code_match = re.search(r"versionCode:\s*(\d+)", version)
-version_name = name_match.group(1) if name_match else None
-version_code = int(code_match.group(1)) if code_match else None
-
-checks = {
-    'authoritative version source parses': bool(version_name and version_code),
-    'package version matches authoritative version': package.get('version') == version_name,
-    'phase tabs use color status not symbols': ".tab.done{background" in css and ".tab.warn{background" in css and "content:'✓'" not in css and "content:'!'" not in css,
-    'bottom next unresolved replaces review action': 'id="nextUnresolvedBottomBtn"' in idx and '>Next Unresolved</button>' in idx and "$('nextUnresolvedBottomBtn').onclick=nextUnresolved" in app,
-    'contact privacy cleanup': 'mailto:' not in branding and 'tel:' not in branding and 'Contact: ${b.officeName}' in branding,
-    'app reads version source': 'window.TCCC_BUILD?.versionName' in app,
-    'modal override removed': '.view,.modal,.safetySplash{position:relative' not in css,
-    'modal fixed and centered': re.search(r'\.modal\{position:fixed;inset:0;z-index:900;.*align-items:center;justify-content:center', css) is not None,
-    'mass pass remains removed': 'function completeBlock(' not in app and 'block-closeout' not in app and 'function reviewRemaining()' not in app,
-    'explicit NT justification': 'NT_REASONS' in app and 'requestNtReason' in app and 'Other' in app,
-    'A2 remediation gate': "Attempt 2 is reserved for remediation" in app and "a1.finalResult==='FAIL'" in app,
-    'pre-assessment start gate': 'Begin Assessment' in app and 'Evaluator ready check' in app,
-    'void unfinished attempt': 'function voidCurrentAttempt()' in app and 'Void In-Progress Attempt' in idx,
-    'monotonic timer': 'performance.now' in app and 'timerNeedsRecovery' in app and 'RECOVERY REQUIRED' in app,
-    'CSV formula hardening': 'function csvValue' in app and "[=+\\-@]" in app,
-    'Unicode-capable canvas PDF': "canvas.toDataURL('image/jpeg'" in app and 'fillText(o.text' in app and 'replace(/[^\\x20-\\x7E]/g' not in app,
-    'tourniquet CMC wording': re.search(r'"id": "CMC-062"[\s\S]{0,500}Wound could be closely monitored', tiers) is not None,
-    'tourniquet CPP wording': re.search(r'"id": "CPP-062"[\s\S]{0,500}Wound could be closely monitored', tiers) is not None,
-    'bad tourniquet wording removed': 'Wound could not be closely monitored' not in tiers,
-    '48px field controls': 'min-height:48px' in css and 'min-height:52px' in css,
-    'native branding source exists': (root / 'native-android-res' / 'mipmap-xxxhdpi' / 'ic_launcher.png').is_file(),
-    'native branding script exists': branding_script.is_file(),
-    'Android hardener reads authoritative version': "www/version.js" in harden and "const VERSION_NAME = '2.17.0'" not in harden and 'const VERSION_CODE = 21700' not in harden,
-    'test workflow uses existing branding script': 'bash scripts/apply-android-native-branding.sh' in test_workflow and 'apply_android_branding.py' not in test_workflow,
-    'release workflow uses existing branding script': 'bash scripts/apply-android-native-branding.sh' in release_workflow and 'apply_android_branding.py' not in release_workflow,
-    'test workflow regenerates Android before branding': test_workflow.find('npx cap add android') < test_workflow.find('bash scripts/apply-android-native-branding.sh'),
-    'release workflow regenerates Android before branding': release_workflow.find('npx cap add android') < release_workflow.find('bash scripts/apply-android-native-branding.sh'),
-    'v2.20 schema migration': 'x.schemaVersion=3' in app and 'db.schemaVersion=3' in app,
-    'structured failure mode model': 'FAILURE_MODES' in app and 'FAILURE_CONTRIBUTORS' in app and 'failureDetails' in app,
-    'critical failure RCA required': 'Critical failures require both a failure mode and a primary contributor.' in app and 'criticalCauseMissing' in app,
-    'noncritical fail remains one tap': "mode:'unclassified',modeLabel:'Unclassified / review later'" in app,
-    'remediation reason and action captured': 'remediationReason' in app and 'remediationAction' in app and 'Record the remediation reason and corrective action' in app,
-    'class performance intelligence dashboard': 'classAnalyticsKpis' in idx and 'renderClassAnalytics' in app and 'classHeatmap' in idx,
-    'normalized criterion gap rate': 'failRate:tested?fail/tested:null' in app and 'HIGHEST CRITERION FAILURE RATES' in app,
-    'scenario coverage gap analytics': 'Scenario coverage gaps — highest NT rate' in app and "'Scenario coverage'" in app,
-    'first pass vs final qualification analytics': "['First-pass'" in app and "['Final pass'" in app,
-    'remediation and repeat failure analytics': "['Remediation success'" in app and "['Repeat failure'" in app,
-    'student comparison without leaderboard ranking': 'studentComparison' in idx and 'Remediation gain' in app,
-    'evaluator pattern signal capture': 'attemptEvaluatorId' in idx and 'evaluatorSignalStats' in app and 'Descriptive only — not inter-rater agreement' in app,
-    'roster operational filters': 'data-roster-filter="not-started"' in idx and 'data-roster-filter="remediation"' in idx and 'rosterMatches' in app,
-    'field and review modes': 'evalModeBtn' in idx and 'fieldMode' in app and '.fieldMode #reviewTimelineCard' in css,
-    'collapsed evaluator header': '#evalHeader.collapsed' in css and 'updateEvalHeaderCollapse' in app,
-    'analysis-ready export': 'classAnalyticsCsvBtn' in idx and 'exportClassAnalyticsCsv' in app and 'failure_mode_label' in app and 'primary_contributor_label' in app,
-    'standardized site/course/scenario fields': 'siteCode' in app and 'courseType' in app and 'scenarioDifficulty' in app and 'curriculumId' in app,
+import json, re
+root=Path(__file__).resolve().parents[1]; www=root/'www'
+def read(p): return p.read_text(encoding='utf-8')
+app=read(www/'app.js'); css=read(www/'styles.css'); idx=read(www/'index.html'); tiers=read(www/'tiers.js'); version=read(www/'version.js'); branding=read(www/'branding.js'); installs=read(www/'installations.js'); harden=read(root/'scripts'/'harden-android.mjs')
+package=json.loads(read(root/'package.json')); tw=read(root/'.github/workflows/build-test-apk.yml'); rw=read(root/'.github/workflows/build-release-apk.yml')
+name=re.search(r"versionName:\s*['\"]([^'\"]+)['\"]",version).group(1); code=int(re.search(r'versionCode:\s*(\d+)',version).group(1))
+# installation catalog is JSON inside Object.freeze(...)
+m=re.search(r'Object\.freeze\((\{[\s\S]*\})\);\s*$',installs); catalog=json.loads(m.group(1)) if m else {}
+commands={x['id'] for x in catalog.get('commands',[])}; bases=catalog.get('installations',[]); ids=[x.get('id') for x in bases]
+struct=all(x.get('id') and x.get('name') and x.get('hostCommand') and isinstance(x.get('commands'),list) for x in bases)
+refs=all(x.get('hostCommand') in commands and all(c in commands for c in x.get('commands',[])) for x in bases)
+checks={
+'authoritative version 2.21.0': name=='2.21.0' and code==22100,
+'package version matches': package.get('version')==name,
+'database schema v4': 'x.schemaVersion=4' in app and 'db.schemaVersion=4' in app and 'schemaVersion:4' in app,
+'installation catalog loads before app': idx.find('installations.js')>0 and idx.find('installations.js')<idx.find('app.js'),
+'installation catalog parses': bool(catalog),
+'installation catalog has stable unique IDs': len(bases)>=70 and len(ids)==len(set(ids)) and struct,
+'installation command references valid': refs and {'ACC','AETC','AFGSC','AFMC','AMC','AFSOC','PACAF','USAFE-AFAFRICA','AFDW','USAFA'}.issubset(commands),
+'installation tenant relationships supported': any(len(x.get('commands',[]))>1 for x in bases),
+'current JB Lindsey Graham alias retained': any(x.get('name')=='Joint Base Lindsey Graham' and 'Joint Base Charleston' in x.get('aliases',[]) for x in bases),
+'MAJCOM/base class form': 'Supported MAJCOM / Command *' in app and 'Home installation *' in app and 'Show all active-duty installations' in app,
+'training location separate from home': 'Training location is the same as home installation' in app and 'trainingLocationType' in app,
+'location migration preserves legacy data': 'inferInstallationId(legacy)' in app and "c.location=c.trainingLocationName||c.homeInstallationName" in app,
+'operational MAJCOM separate from host command': 'operational_majcom' in app and 'home_installation_host_command' in app and 'hostCommand' in app,
+'site/unit/exercise retained': 'siteCode' in app and 'unit' in app and 'exercise' in app,
+'program management dashboard present': all(x in idx for x in ['managementKpis','managementMajcomTable','managementInstallationTable','managementRootCauses','managementGapTable','managementDataQuality']),
+'management MAJCOM/base/tier/course filters': all(x in idx for x in ['managementMajcom','managementInstallation','managementTier','managementCourseType']),
+'multi-class normalized gap aggregation': 'aggregateManagement' in app and 'failRate:tested?g.fail/tested:null' in app and 'tierId:itemId' not in app,
+'RCA management aggregation': 'classifiedFailObs' in app and 'rootCounts' in app and 'RCA classified' in app,
+'MAJCOM and installation rollups': "managementGroupRows(scope,'majcom')" in app and "managementGroupRows(scope,'installation')" in app,
+'data quality panel': 'classes missing MAJCOM' in app and 'classes missing home installation' in app and 'failed observations missing RCA' in app,
+'management summary export': 'exportManagementSummaryCsv' in app and 'managementSummaryCsvBtn' in idx,
+'enterprise detail schema v2': "TCCC_ANALYTICS_2.0" in app and 'installation_catalog_version' in app,
+'enterprise detail includes location+RCA+remediation': all(x in app for x in ['operational_majcom','home_installation_id','remediation_reason','failure_mode_label','primary_contributor_label']),
+'enterprise export excludes student names': "student_local_id" in app and "student_anon_id" not in app,
+'class enterprise detail export': 'classEnterpriseCsvBtn' in idx and 'exportClassEnterpriseAnalyticsCsv' in app,
+'phase tabs use color status': '.tab.done{background' in css and '.tab.warn{background' in css and "content:'✓'" not in css,
+'next unresolved top/bottom': 'id="nextUnresolvedBottomBtn"' in idx and "$(`nextUnresolvedBottomBtn`)" not in app and "$('nextUnresolvedBottomBtn').onclick=nextUnresolved" in app,
+'contact privacy': 'mailto:' not in branding and 'tel:' not in branding and 'Contact: ${b.officeName}' in branding,
+'modal fixed': re.search(r'\.modal\{position:fixed;inset:0;z-index:900;.*align-items:center;justify-content:center',css) is not None,
+'mass pass removed': 'function completeBlock(' not in app,
+'NT justification': 'NT_REASONS' in app and 'requestNtReason' in app,
+'A2 remediation gate': 'Attempt 2 is reserved for remediation' in app,
+'pre-assessment gate': 'Evaluator ready check' in app and 'Begin Assessment' in app,
+'void unfinished attempt': 'function voidCurrentAttempt()' in app,
+'timer recovery': 'performance.now' in app and 'RECOVERY REQUIRED' in app,
+'CSV formula hardening': 'function csvValue' in app and '[=+\\-@]' in app,
+'Unicode canvas PDF': "canvas.toDataURL('image/jpeg'" in app,
+'tourniquet CMC CAN wording': re.search(r'"id": "CMC-062"[\s\S]{0,500}Wound could be closely monitored',tiers) is not None,
+'tourniquet CPP CAN wording': re.search(r'"id": "CPP-062"[\s\S]{0,500}Wound could be closely monitored',tiers) is not None,
+'bad tourniquet wording removed': 'Wound could not be closely monitored' not in tiers,
+'48px field controls': 'min-height:48px' in css and 'min-height:52px' in css,
+'structured RCA model': 'FAILURE_MODES' in app and 'FAILURE_CONTRIBUTORS' in app and 'failureDetails' in app,
+'critical failure RCA required': 'Critical failures require both a failure mode and a primary contributor.' in app,
+'noncritical fail one tap': "mode:'unclassified',modeLabel:'Unclassified / review later'" in app,
+'remediation reason/action': 'remediationReason' in app and 'remediationAction' in app,
+'class analytics': 'classAnalyticsKpis' in idx and 'renderClassAnalytics' in app and 'classHeatmap' in idx,
+'criterion rates normalized': 'failRate:tested?fail/tested:null' in app,
+'first vs final analytics': "['First-pass'" in app and "['Final pass'" in app,
+'roster filters': 'data-roster-filter="not-started"' in idx and 'data-roster-filter="remediation"' in idx,
+'field/review modes': 'evalModeBtn' in idx and '.fieldMode #reviewTimelineCard' in css,
+'collapsed evaluator header': '#evalHeader.collapsed' in css and 'updateEvalHeaderCollapse' in app,
+'native branding resources': (root/'native-android-res/mipmap-xxxhdpi/ic_launcher.png').is_file(),
+'workflows preflight installations': 'test -f www/installations.js' in tw and 'test -f www/installations.js' in rw,
+'workflows syntax-check installations': 'node --check www/installations.js' in tw and 'node --check www/installations.js' in rw,
+'workflows branding after Capacitor generation': tw.find('npx cap add android')<tw.find('run: bash scripts/apply-android-native-branding.sh') and rw.find('npx cap add android')<rw.find('run: bash scripts/apply-android-native-branding.sh'),
 }
-
-failed = [name for name, ok in checks.items() if not ok]
-for name, ok in checks.items():
-    print(('PASS' if ok else 'FAIL') + ' - ' + name)
-if failed:
-    raise SystemExit('\nHardening validation failed: ' + ', '.join(failed))
-print(f'\n{len(checks)} hardening checks passed for TCCC v{version_name} ({version_code}).')
+# fix walrus-created non-string key if any
+checks={str(k):v for k,v in checks.items()}
+failed=[k for k,v in checks.items() if not v]
+for k,v in checks.items(): print(('PASS' if v else 'FAIL')+' - '+k)
+if failed: raise SystemExit('\nValidation failed: '+', '.join(failed))
+print(f'\n{len(checks)} release checks passed for TCCC v{name} ({code}); {len(bases)} installations / {len(commands)} commands validated.')

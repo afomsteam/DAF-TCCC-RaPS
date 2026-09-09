@@ -1,8 +1,8 @@
 {
-  "appId": "org.tccc.evaluationsuite",
-  "appName": "TCCC",
-  "webDir": "www",
-  "server": {
-    "androidScheme": "https"
-  }
+	"appId": "org.tccc.evaluationsuite",
+	"appName": "TCCC",
+	"webDir": "www",
+	"server": {
+		"androidScheme": "https"
+	}
 }

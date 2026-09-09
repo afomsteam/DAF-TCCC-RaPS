@@ -1,43 +1,69 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const root = process.cwd();
-const manifest = path.join(root, 'android/app/src/main/AndroidManifest.xml');
-if (!fs.existsSync(manifest)) throw new Error('AndroidManifest.xml not found. Run npx cap add android/sync first.');
-let xml = fs.readFileSync(manifest, 'utf8');
-xml = xml.replace(/\s*<uses-permission[^>]*android:name=["']android\.permission\.INTERNET["'][^>]*\/>/g, '');
-xml = xml.replace(/<application\b([^>]*)>/, (m, attrs) => {
-  const strip = attrs
-    .replace(/\sandroid:allowBackup=["'][^"']*["']/g, '')
-    .replace(/\sandroid:usesCleartextTraffic=["'][^"']*["']/g, '')
-    .replace(/\sandroid:fullBackupContent=["'][^"']*["']/g, '');
-  return `<application${strip} android:allowBackup="false" android:usesCleartextTraffic="false" android:fullBackupContent="false">`;
-});
-fs.writeFileSync(manifest, xml);
+const versionPath = path.resolve('www/version.js');
+if (!fs.existsSync(versionPath)) {
+  throw new Error('www/version.js not found.');
+}
 
-const src = path.join(root, 'assets/android-icons');
-const res = path.join(root, 'android/app/src/main/res');
-for (const density of ['mdpi','hdpi','xhdpi','xxhdpi','xxxhdpi']) {
-  const from = path.join(src, `mipmap-${density}`);
-  const to = path.join(res, `mipmap-${density}`);
-  fs.mkdirSync(to, {recursive:true});
-  for (const name of ['ic_launcher.png','ic_launcher_round.png','ic_launcher_foreground.png']) {
-    fs.copyFileSync(path.join(from,name), path.join(to,name));
+const versionSource = fs.readFileSync(versionPath, 'utf8');
+const nameMatch = versionSource.match(/versionName:\s*['\"]([^'\"]+)['\"]/);
+const codeMatch = versionSource.match(/versionCode:\s*(\d+)/);
+if (!nameMatch || !codeMatch) {
+  throw new Error('Could not read versionName/versionCode from www/version.js.');
+}
+
+const VERSION_NAME = nameMatch[1];
+const VERSION_CODE = Number(codeMatch[1]);
+
+const manifestPath = path.resolve('android/app/src/main/AndroidManifest.xml');
+const gradleCandidates = [
+  path.resolve('android/app/build.gradle'),
+  path.resolve('android/app/build.gradle.kts')
+];
+
+if (!fs.existsSync(manifestPath)) {
+  throw new Error('Android project not found. Run Capacitor Android generation first.');
+}
+
+let manifest = fs.readFileSync(manifestPath, 'utf8');
+manifest = manifest.replace(/\s*<uses-permission\s+android:name="android\.permission\.INTERNET"\s*\/>\s*/g, '\n');
+
+if (/android:allowBackup="[^"]*"/.test(manifest)) {
+  manifest = manifest.replace(/android:allowBackup="[^"]*"/, 'android:allowBackup="false"');
+} else {
+  manifest = manifest.replace(/<application\b/, '<application android:allowBackup="false"');
+}
+
+if (/android:usesCleartextTraffic="[^"]*"/.test(manifest)) {
+  manifest = manifest.replace(/android:usesCleartextTraffic="[^"]*"/, 'android:usesCleartextTraffic="false"');
+} else {
+  manifest = manifest.replace(/<application\b/, '<application android:usesCleartextTraffic="false"');
+}
+
+fs.writeFileSync(manifestPath, manifest);
+
+const gradlePath = gradleCandidates.find((candidate) => fs.existsSync(candidate));
+if (!gradlePath) {
+  throw new Error('android/app/build.gradle(.kts) not found.');
+}
+
+let gradle = fs.readFileSync(gradlePath, 'utf8');
+if (gradlePath.endsWith('.kts')) {
+  const before = gradle;
+  gradle = gradle.replace(/versionCode\s*=\s*\d+/, `versionCode = ${VERSION_CODE}`);
+  gradle = gradle.replace(/versionName\s*=\s*"[^"]+"/, `versionName = "${VERSION_NAME}"`);
+  if (gradle === before && (!gradle.includes(`versionCode = ${VERSION_CODE}`) || !gradle.includes(`versionName = "${VERSION_NAME}"`))) {
+    throw new Error(`Could not patch version values in ${gradlePath}`);
+  }
+} else {
+  const before = gradle;
+  gradle = gradle.replace(/versionCode\s+\d+/, `versionCode ${VERSION_CODE}`);
+  gradle = gradle.replace(/versionName\s+['"][^'"]+['"]/, `versionName "${VERSION_NAME}"`);
+  if (gradle === before && (!gradle.includes(`versionCode ${VERSION_CODE}`) || !gradle.includes(`versionName "${VERSION_NAME}"`))) {
+    throw new Error(`Could not patch version values in ${gradlePath}`);
   }
 }
-fs.mkdirSync(path.join(res,'mipmap-anydpi-v26'), {recursive:true});
-const adaptive = `<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n  <background android:drawable="@color/ic_launcher_background"/>\n  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>\n</adaptive-icon>\n`;
-fs.writeFileSync(path.join(res,'mipmap-anydpi-v26/ic_launcher.xml'), adaptive);
-fs.writeFileSync(path.join(res,'mipmap-anydpi-v26/ic_launcher_round.xml'), adaptive);
-fs.mkdirSync(path.join(res,'values'), {recursive:true});
-const valuesDir=path.join(res,'values');
-let colorUpdated=false;
-for (const name of fs.readdirSync(valuesDir).filter(n=>n.endsWith('.xml'))) {
-  const f=path.join(valuesDir,name);let v=fs.readFileSync(f,'utf8');
-  if (/name=["']ic_launcher_background["']/.test(v)) {
-    v=v.replace(/(<color\s+name=["']ic_launcher_background["'][^>]*>)[^<]*(<\/color>)/, '$1#08131D$2');
-    fs.writeFileSync(f,v);colorUpdated=true;break;
-  }
-}
-if(!colorUpdated)fs.writeFileSync(path.join(valuesDir,'tccc_launcher_colors.xml'), `<?xml version="1.0" encoding="utf-8"?>\n<resources><color name="ic_launcher_background">#08131D</color></resources>\n`);
-console.log('Android hardening and launcher assets applied.');
+
+fs.writeFileSync(gradlePath, gradle);
+console.log(`Android hardened: version ${VERSION_NAME} (${VERSION_CODE}), backups disabled, cleartext disabled, INTERNET permission removed.`);

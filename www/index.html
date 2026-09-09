@@ -50,13 +50,42 @@
       <img class="heroIcon" src="assets/app-icon.png" alt="TCCC Evaluation Suite icon">
       <div class="eyebrow">TACTICAL COMBAT CASUALTY CARE</div>
       <h1 data-brand-product>TCCC Evaluation Suite</h1>
-      <p>Class-based, offline grading for TCCC Tier 1–4 scenario evaluations. Critical tasks require explicit grading; noncritical criteria support scenario applicability and block closeout.</p>
-      <div class="versionLine">v<span id="appVersion">—</span> · Android · Field-hardened evaluator workflow</div>
+      <p>Class-based, offline grading for TCCC Tier 1–4 scenario evaluations. Critical tasks require explicit grading; noncritical criteria support scenario applicability, structured review, and performance-improvement analysis.</p>
+      <div class="versionLine">v<span id="appVersion">—</span> · Android · Readiness & performance intelligence</div>
     </section>
     <section class="homeActions">
       <button id="newClassBtn" class="action primary big">+ New Class</button>
       <button id="importBackupBtn" class="action big">Restore Backup</button>
       <input id="backupImportFile" type="file" accept=".json,application/json" hidden>
+    </section>
+    <section class="card managementCard">
+      <div class="cardHead"><span>Program Management Intelligence</span><span id="managementScopeLabel">All local classes</span></div>
+      <p class="helper">Local analytics only. Use MAJCOM and installation filters to review training performance, RCA, remediation, and competency gaps before exporting data to the future DAF backend.</p>
+      <div class="managementFilters">
+        <label><span>MAJCOM / Command</span><select id="managementMajcom"></select></label>
+        <label><span>Home installation</span><select id="managementInstallation"></select></label>
+        <label><span>Tier</span><select id="managementTier"><option value="">All tiers</option><option value="1">Tier 1</option><option value="2">Tier 2</option><option value="3">Tier 3</option><option value="4">Tier 4</option></select></label>
+        <label><span>Course type</span><select id="managementCourseType"><option value="">All course types</option><option value="initial">Initial qualification</option><option value="sustainment">Sustainment / refresher</option><option value="remediation">Remediation</option><option value="calibration">Instructor / evaluator calibration</option><option value="other">Other</option></select></label>
+        <button id="managementResetBtn" class="ghost small" type="button">Reset Scope</button>
+      </div>
+      <div id="managementKpis" class="analyticsKpis"></div>
+      <details class="analyticsDetails" open>
+        <summary>MAJCOM &amp; Installation Performance</summary>
+        <div id="managementMajcomTable"></div>
+        <div id="managementInstallationTable" class="managementTableGap"></div>
+      </details>
+      <details class="analyticsDetails">
+        <summary>Root Causes &amp; Competency Gaps</summary>
+        <div class="analyticsSplit">
+          <div><h3>Primary Root Causes</h3><div id="managementRootCauses"></div></div>
+          <div><h3>Highest Competency Gaps</h3><div id="managementGapTable"></div></div>
+        </div>
+      </details>
+      <div id="managementDataQuality" class="dataQualityPanel"></div>
+      <div class="exportGrid managementExports">
+        <button id="managementSummaryCsvBtn" class="action primary">Management Summary CSV</button>
+        <button id="enterpriseAnalyticsCsvBtn" class="action">Enterprise Detail CSV</button>
+      </div>
     </section>
     <section class="card">
       <div class="cardHead"><span>Classes</span><span id="classCount">0</span></div>
@@ -94,12 +123,40 @@
       <p class="helper">Class-level NT applies only to noncritical criteria. All critical criteria remain mandatory in the evaluation and cannot be removed by the scenario profile. A critical NT or N/O remains unresolved and blocks finalization.</p>
       <div class="scenarioTools"><button id="scenarioBtn" class="action">Configure Scenario NT</button></div>
     </section>
+    <section class="card analyticsCard">
+      <div class="cardHead"><span>Class Performance Intelligence</span><span id="analyticsScope">Finalized Attempt 1</span></div>
+      <div id="classAnalyticsKpis" class="analyticsKpis"></div>
+      <details class="analyticsDetails" open>
+        <summary>Training Gaps &amp; Root Causes</summary>
+        <div class="analyticsSplit">
+          <div><h3>Highest Competency Gaps</h3><div id="classGapTable"></div></div>
+          <div><h3>Primary Root Causes</h3><div id="classRootCauses"></div></div>
+        </div>
+      </details>
+      <details class="analyticsDetails">
+        <summary>Student Comparison &amp; Competency Heat Map</summary>
+        <div id="studentComparison"></div>
+        <div id="classHeatmap" class="heatmapWrap"></div>
+        <div id="evaluatorSignals" class="evaluatorSignals"></div>
+      </details>
+    </section>
     <section class="card">
       <div class="cardHead"><span>Roster</span><span id="rosterCount"></span></div>
       <div class="rosterTools">
         <button id="addStudentBtn" class="action primary">+ Add Student</button>
         <button id="importRosterBtn" class="action">Import Roster CSV</button>
         <input id="rosterFile" type="file" accept=".csv,text/csv" hidden>
+      </div>
+      <div class="rosterFilterBar" aria-label="Roster filters">
+        <input id="rosterSearch" class="rosterSearch" type="search" placeholder="Search student, rank, or training ID">
+        <div id="rosterFilters" class="rosterFilters">
+          <button class="filterChip active" data-roster-filter="all">All</button>
+          <button class="filterChip" data-roster-filter="not-started">Not Started</button>
+          <button class="filterChip" data-roster-filter="in-progress">In Progress</button>
+          <button class="filterChip" data-roster-filter="failed">Failed</button>
+          <button class="filterChip" data-roster-filter="remediation">Remediation</button>
+          <button class="filterChip" data-roster-filter="qualified">Qualified</button>
+        </div>
       </div>
       <div id="rosterList" class="rosterList"></div>
     </section>
@@ -109,9 +166,10 @@
         <button id="classPdfBtn" class="action primary">Visual Class Summary PDF</button>
         <button id="classSummaryCsvBtn" class="action">Summary CSV</button>
         <button id="classCriteriaCsvBtn" class="action">Criteria CSV</button>
-        <button id="enterpriseAnalyticsCsvBtn" class="action primary">Enterprise Analytics CSV</button>
         <button id="classTimersCsvBtn" class="action">Timers CSV</button>
         <button id="classEventsCsvBtn" class="action">Events CSV</button>
+        <button id="classAnalyticsCsvBtn" class="action">Performance Analytics CSV</button>
+        <button id="classEnterpriseCsvBtn" class="action">Enterprise Detail CSV</button>
         <button id="backupClassBtn" class="action">Backup Class JSON</button>
       </div>
     </section>
@@ -151,6 +209,7 @@
     <div class="phaseToolbar">
       <button id="prevPhaseBtn" class="ghost small">← Previous</button>
       <button id="nextUnresolvedBtn" class="action compact">Next Unresolved</button>
+      <button id="evalModeBtn" class="ghost small" type="button">Field Mode</button>
       <label class="toggleLabel"><input id="showNtToggle" type="checkbox"> Show NT</label>
       <button id="nextPhaseBtn" class="ghost small">Next →</button>
     </div>
@@ -158,14 +217,15 @@
     <div id="items"></div>
     <div class="blockCloseout"><button id="nextUnresolvedBottomBtn" class="action primary nextUnresolvedAction">Next Unresolved</button><div id="blockCloseoutHint" class="helper"></div></div>
   </section>
-  <section class="card">
+  <section id="reviewTimelineCard" class="card">
     <div class="cardHead"><span>Clinical / Evaluation Timeline</span><span id="eventCount"></span></div>
     <div id="timeline" class="timeline"></div>
   </section>
-  <section class="card signoff">
+  <section id="reviewSignoffCard" class="card signoff">
     <div class="cardHead"><span>Sign-Off / Notes</span><span>Typed acknowledgment</span></div>
     <div class="signGrid">
       <input id="trainerSign" placeholder="Evaluator name (stored with this attempt)">
+      <input id="attemptEvaluatorId" placeholder="Evaluator ID / cadre identifier">
       <input id="studentSign" placeholder="Student acknowledgment name">
     </div>
     <textarea id="overallNotes" placeholder="Overall evaluator comments / notes"></textarea>
