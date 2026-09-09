@@ -1,0 +1,129 @@
+name: Build TCCC Test APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Preflight required source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f package.json
+          test -f capacitor.config.json
+          test -f www/version.js
+          test -f scripts/prepare-android.mjs
+          test -f scripts/harden-android.mjs
+          test -f scripts/apply-android-native-branding.sh
+          test -d native-android-res
+          test -f native-android-res/mipmap-xxxhdpi/ic_launcher.png
+          test -f native-android-res/mipmap-xxxhdpi/ic_launcher_foreground.png
+          test -f native-android-res/drawable-port-xxxhdpi/splash.png
+          echo "Preflight source tree OK"
+
+      - name: Validate evaluator hardening
+        shell: bash
+        run: |
+          node --check www/app.js
+          node --check www/tiers.js
+          node --check www/branding.js
+          node --check www/version.js
+          node --check scripts/harden-android.mjs
+          python scripts/validate_hardening.py
+
+      - name: Generate clean Capacitor Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/prepare-android.mjs
+          npx cap add android
+          npx cap sync android
+
+      - name: Apply TCCC native branding
+        shell: bash
+        run: bash scripts/apply-android-native-branding.sh
+
+      - name: Apply Android hardening and authoritative version
+        run: node scripts/harden-android.mjs
+
+      - name: Verify prepared Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+          test -f android/app/src/main/res/drawable-port-xxxhdpi/splash.png
+          test -f android/app/src/main/AndroidManifest.xml
+          if [ -f android/app/build.gradle ]; then
+            GRADLE=android/app/build.gradle
+          elif [ -f android/app/build.gradle.kts ]; then
+            GRADLE=android/app/build.gradle.kts
+          else
+            echo "android/app/build.gradle(.kts) missing after Capacitor generation" >&2
+            exit 1
+          fi
+          python - "$GRADLE" <<'PY'
+          import pathlib, re, sys
+          version = pathlib.Path('www/version.js').read_text(encoding='utf-8')
+          gradle = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+          name = re.search(r"versionName:\s*['\"]([^'\"]+)['\"]", version).group(1)
+          code = re.search(r"versionCode:\s*(\d+)", version).group(1)
+          if not re.search(rf"versionName\s*(?:=\s*)?['\"]{re.escape(name)}['\"]", gradle):
+              raise SystemExit(f'Gradle versionName does not match {name}')
+          if not re.search(rf"versionCode\s*(?:=\s*)?{code}\b", gradle):
+              raise SystemExit(f'Gradle versionCode does not match {code}')
+          print(f'Verified Android version {name} ({code})')
+          PY
+          grep -q 'android:allowBackup="false"' android/app/src/main/AndroidManifest.xml
+          grep -q 'android:usesCleartextTraffic="false"' android/app/src/main/AndroidManifest.xml
+          echo "Android branding, hardening, and version verification OK"
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Name artifact and create checksum
+        shell: bash
+        run: |
+          VERSION=$(python - <<'PY'
+          import re
+          t=open('www/version.js', encoding='utf-8').read()
+          print(re.search(r"versionName:\s*['\"]([^'\"]+)['\"]", t).group(1))
+          PY
+          )
+          cp android/app/build/outputs/apk/debug/app-debug.apk "TCCC-v${VERSION}-test.apk"
+          sha256sum "TCCC-v${VERSION}-test.apk" > "TCCC-v${VERSION}-test.sha256"
+
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TCCC-test-apk
+          path: |
+            TCCC-v*-test.apk
+            TCCC-v*-test.sha256
