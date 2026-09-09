@@ -1,0 +1,11 @@
+// v2.14 Android-only cleanup service worker.
+// If an earlier build registered a PWA service worker, this version removes it and its caches.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+      .then(() => self.registration.unregister())
+      .then(() => self.clients.claim())
+  );
+});
